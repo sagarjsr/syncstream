@@ -376,7 +376,7 @@ Contributions are welcome! Please feel free to submit a Pull Request. For major 
 
 Having issues? Here's how to get help:
 
-1. **📖 Check Documentation**: Review this README and `instruction.md`
+1. **📖 Check Documentation**: Review this README 
 2. **🔍 Search Issues**: Look for similar problems in the issues
 3. **🐛 Report Bugs**: Create a detailed issue with steps to reproduce
 4. **💡 Feature Requests**: Open an issue with your idea
