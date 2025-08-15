@@ -1,0 +1,64 @@
+{
+  "name": "syncstream-app",
+  "version": "1.0.0",
+  "description": "SyncStream - Real-time Media Synchronization App",
+  "private": true,
+  "workspaces": [
+    "syncstream-web",
+    "syncstream-server"
+  ],
+  "scripts": {
+    "start": "./start.sh",
+    "dev": "./start.sh", 
+    "setup": "npm install",
+    "backend": "cd syncstream-server && node server.js",
+    "frontend": "cd syncstream-web && npm run dev",
+    "build": "npm run build:frontend && npm run build:backend",
+    "build:frontend": "cd syncstream-web && npm run build",
+    "build:backend": "echo 'Backend requires no build step'",
+    "clean": "rm -rf node_modules syncstream-server/node_modules syncstream-web/node_modules",
+    "kill-ports": "lsof -ti :3000 | xargs kill -9 2>/dev/null || true && lsof -ti :3001 | xargs kill -9 2>/dev/null || true",
+    "lint": "cd syncstream-web && npm run lint",
+    "test": "echo 'No tests configured yet'"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
+    "next": "15.4.6",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "zustand": "^5.0.7"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19", 
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "15.4.6",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  },
+  "keywords": [
+    "synchronization",
+    "youtube",
+    "real-time",
+    "socket.io",
+    "nextjs",
+    "nodejs",
+    "monorepo"
+  ],
+  "author": "SyncStream Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/syncstream-app.git"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  }
+}
