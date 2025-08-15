@@ -54,7 +54,7 @@
 
 ```bash
 # Clone and start everything in one go
-git clone <your-repo-url>
+git clone [<your-repo-url>](https://github.com/sagarjsr/syncstream.git)
 cd app
 ./start.sh
 ```
