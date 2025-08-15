@@ -17,6 +17,7 @@ export interface RoomState {
   mediaRef: string | null;
   isPlaying: boolean;
   currentTime: number;
+  leaderServerTs: number;
 }
 
 export interface SyncStreamStore {
@@ -45,6 +46,7 @@ export interface SyncStreamStore {
   pause: () => void;
   seek: (time: number) => void;
   setMedia: (kind: 'youtube' | 'mp3', ref: string) => void;
+  clearMedia: () => void;
   
   // Leader management
   promoteLeader: (participantId: string) => void;
@@ -60,9 +62,25 @@ export interface SyncStreamStore {
   requestSnapshot: () => void;
 }
 
-import { getSocketServerUrl } from './utils';
+// Dynamic Socket URL detection
+const getSocketServerUrl = (): string => {
+  // Check if we have an environment variable
+  const envUrl = process.env.NEXT_PUBLIC_SOCKET_URL;
+  if (envUrl && envUrl.trim() !== '') {
+    return envUrl;
+  }
 
-const SOCKET_SERVER_URL = getSocketServerUrl();
+  // Dynamic detection based on current host
+  if (typeof window !== 'undefined') {
+    const protocol = window.location.protocol;
+    const hostname = window.location.hostname;
+    const port = '3001'; // Server port
+    return `${protocol}//${hostname}:${port}`;
+  }
+
+  // Fallback for server-side rendering
+  return 'http://localhost:3001';
+};
 
 interface JoinRoomResponse {
   error?: string;
@@ -94,24 +112,18 @@ export const useSyncStreamStore = create<SyncStreamStore>((set, get) => ({
     mediaRef: null,
     isPlaying: false,
     currentTime: 0,
+    leaderServerTs: 0,
   },
   
   syncEngine: new SyncEngine(),
 
   // Connect to the server
-  connect: (serverUrl = SOCKET_SERVER_URL) => {
-    const socket = io(serverUrl, {
-      transports: ['websocket', 'polling'],
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      timeout: 20000,
-      autoConnect: true,
-      withCredentials: true
-    });
+  connect: (serverUrl?: string) => {
+    const socketUrl = serverUrl || getSocketServerUrl();
+    const socket = io(socketUrl);
     
     socket.on('connect', () => {
-      console.log('Connected to SyncStream server');
+      console.log('Connected to SyncStream server at:', socketUrl);
       set({ 
         socket, 
         isConnected: true, 
@@ -119,7 +131,7 @@ export const useSyncStreamStore = create<SyncStreamStore>((set, get) => ({
       });
       
       // Calculate server offset for sync
-      get().syncEngine.calculateServerOffset(serverUrl);
+      get().syncEngine.calculateServerOffset(socketUrl);
     });
 
     socket.on('disconnect', () => {
@@ -321,7 +333,8 @@ export const useSyncStreamStore = create<SyncStreamStore>((set, get) => ({
           mediaKind: mediaKind || state.room.mediaKind,
           mediaRef: mediaRef || state.room.mediaRef,
           isPlaying,
-          currentTime
+          currentTime,
+          leaderServerTs
         }
       }));
     });
@@ -346,11 +359,29 @@ export const useSyncStreamStore = create<SyncStreamStore>((set, get) => ({
         room: {
           ...state.room,
           isPlaying,
-          currentTime
+          currentTime,
+          leaderServerTs
         }
       }));
 
       console.log(`Control update processed: ${type}`, { isPlaying, currentTime });
+    });
+
+    socket.on('media_cleared', () => {
+      console.log('📨 Received media_cleared event');
+      
+      set(state => ({
+        room: {
+          ...state.room,
+          mediaKind: null,
+          mediaRef: null,
+          isPlaying: false,
+          currentTime: 0,
+          leaderServerTs: Date.now()
+        }
+      }));
+
+      console.log('Media cleared by leader');
     });
 
     socket.on('snapshot_response', ({ mediaKind, mediaRef, isPlaying, leaderMediaTime, leaderServerTs, leaderId, participants }) => {
@@ -367,6 +398,7 @@ export const useSyncStreamStore = create<SyncStreamStore>((set, get) => ({
           mediaRef,
           isPlaying,
           currentTime,
+          leaderServerTs,
           leaderId,
           isLeader: leaderId === state.room.participantId,
           participants
@@ -397,6 +429,7 @@ export const useSyncStreamStore = create<SyncStreamStore>((set, get) => ({
           mediaRef: null,
           isPlaying: false,
           currentTime: 0,
+          leaderServerTs: 0,
         }
       });
     }
@@ -527,6 +560,27 @@ export const useSyncStreamStore = create<SyncStreamStore>((set, get) => ({
         isPlaying: false
       }
     }));
+
+    get().syncEngine.resetDriftHistory();
+  },
+
+  clearMedia: () => {
+    const { socket, room } = get();
+    
+    set(state => ({
+      room: {
+        ...state.room,
+        mediaKind: null,
+        mediaRef: null,
+        currentTime: 0,
+        isPlaying: false
+      }
+    }));
+
+    // Notify all participants that media was cleared
+    if (socket && room.roomId) {
+      socket.emit('media_cleared', { roomId: room.roomId });
+    }
 
     get().syncEngine.resetDriftHistory();
   },

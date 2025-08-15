@@ -1,4 +1,4 @@
-/** HTML5 Audio wrapper for MP3 with same API as YouTubePlayer */
+/** HTML5 Audio wrapper for Media API as YouTubePlayer */
 
 'use client';
 
@@ -24,6 +24,7 @@ interface AudioPlayerProps {
   muted?: boolean;
   width?: number;
   height?: number;
+  disableControls?: boolean; // Disable audio controls for participants
 }
 
 const AudioPlayer = forwardRef<PlayerRef, AudioPlayerProps>(({
@@ -36,7 +37,8 @@ const AudioPlayer = forwardRef<PlayerRef, AudioPlayerProps>(({
   autoplay = false,
   muted = false,
   width = 640,
-  height = 200
+  height = 200,
+  disableControls = false
 }, ref) => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const timeUpdateIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -143,7 +145,7 @@ const AudioPlayer = forwardRef<PlayerRef, AudioPlayerProps>(({
         clearInterval(timeUpdateIntervalRef.current);
       }
     };
-  }, [src, autoplay, muted, handleLoadedData, handlePlay, handlePause, handleEnded, handleWaiting, handleCanPlay, handleError]);
+  }, [src, autoplay, muted, disableControls, handleLoadedData, handlePlay, handlePause, handleEnded, handleWaiting, handleCanPlay, handleError]);
 
   // Expose player methods via ref
   useImperativeHandle(ref, () => ({
@@ -187,13 +189,21 @@ const AudioPlayer = forwardRef<PlayerRef, AudioPlayerProps>(({
           <p className="text-sm text-gray-600 break-all">
             {src.length > 60 ? `${src.substring(0, 60)}...` : src}
           </p>
+          {disableControls && (
+            <p className="text-xs text-orange-600 mt-1">
+              🔒 Controls disabled - Leader controls playback
+            </p>
+          )}
         </div>
         
         <audio
           ref={audioRef}
-          controls
+          controls={!disableControls}
           className="w-full max-w-md"
-          style={{ minWidth: Math.min(300, width - 48) }}
+          style={{ 
+            minWidth: Math.min(300, width - 48),
+            opacity: disableControls ? 0.6 : 1 
+          }}
         >
           Your browser does not support the audio element.
         </audio>
