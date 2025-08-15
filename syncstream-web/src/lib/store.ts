@@ -60,7 +60,9 @@ export interface SyncStreamStore {
   requestSnapshot: () => void;
 }
 
-const SOCKET_SERVER_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001';
+import { getSocketServerUrl } from './utils';
+
+const SOCKET_SERVER_URL = getSocketServerUrl();
 
 interface JoinRoomResponse {
   error?: string;
@@ -98,7 +100,15 @@ export const useSyncStreamStore = create<SyncStreamStore>((set, get) => ({
 
   // Connect to the server
   connect: (serverUrl = SOCKET_SERVER_URL) => {
-    const socket = io(serverUrl);
+    const socket = io(serverUrl, {
+      transports: ['websocket', 'polling'],
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,
+      autoConnect: true,
+      withCredentials: true
+    });
     
     socket.on('connect', () => {
       console.log('Connected to SyncStream server');

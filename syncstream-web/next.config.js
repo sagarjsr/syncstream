@@ -1,6 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Configuration for network access
+  reactStrictMode: true,
+  swcMinify: true,
+  async rewrites() {
+    return [
+      {
+        source: '/api/:path*',
+        destination: 'http://localhost:3001/:path*'
+      }
+    ];
+  }
 };
 
-export default nextConfig;
+module.exports = nextConfig;

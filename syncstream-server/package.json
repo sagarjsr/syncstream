@@ -4,14 +4,16 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "../start.sh",
+    "dev": "../start.sh"
   },
-  "keywords": ["syncstream", "socket.io", "music", "sync"],
+  "keywords": [
+    "syncstream",
+    "socket.io",
+    "music",
+    "sync"
+  ],
   "author": "SyncStream Team",
   "license": "MIT",
-  "description": "SyncStream backend server for real-time music synchronization",
-  "dependencies": {},
-  "devDependencies": {}
+  "description": "SyncStream backend server for real-time music synchronization"
 }

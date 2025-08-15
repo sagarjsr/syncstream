@@ -199,7 +199,7 @@ cd syncstream-web && npm run dev
 ## 📁 Project Structure
 
 ```
-app/ (Monorepo with shared dependencies)
+syncstream/ (Monorepo with shared dependencies)
 ├── 🚀 start.sh                     # One-command startup script (Unix/macOS)
 ├── 🚀 start.bat                    # One-command startup script (Windows)  
 ├── 📚 README.md                    # This file

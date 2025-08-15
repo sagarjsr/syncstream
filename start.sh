@@ -14,6 +14,23 @@ BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# Function to get local IP address
+get_local_ip() {
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS
+        local_ip=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null)
+    else
+        # Linux and others
+        local_ip=$(hostname -I | awk '{print $1}')
+    fi
+    
+    if [[ -z "$local_ip" ]]; then
+        echo "localhost"
+    else
+        echo "$local_ip"
+    fi
+}
+
 # Function to cleanup background processes on exit
 cleanup() {
     echo -e "\n${YELLOW}🛑 Shutting down SyncStream...${NC}"
@@ -102,6 +119,15 @@ fi
 
 echo -e "${GREEN}✅ Backend server started (PID: $BACKEND_PID) - http://localhost:3001${NC}"
 
+# Get local IP address
+LOCAL_IP=$(get_local_ip)
+echo -e "${BLUE}📍 Local IP address: $LOCAL_IP${NC}"
+
+# Create or update frontend .env file
+echo -e "${BLUE}Creating frontend environment configuration...${NC}"
+echo "NEXT_PUBLIC_SOCKET_URL=http://$LOCAL_IP:3001" > "$FRONTEND_DIR/.env"
+echo -e "${GREEN}✅ Frontend environment configured${NC}"
+
 # Start frontend server in background
 echo -e "${BLUE}Starting frontend development server...${NC}"
 cd "$FRONTEND_DIR"
@@ -122,11 +148,13 @@ echo -e "${GREEN}✅ Frontend server started (PID: $FRONTEND_PID)${NC}"
 
 echo ""
 echo -e "${GREEN}🎉 SyncStream is now running!${NC}"
-echo -e "${BLUE}🌐 Frontend: http://localhost:3000${NC}"
-echo -e "${BLUE}🔗 Backend:  http://localhost:3001${NC}"
+echo -e "${BLUE}🌐 Frontend (local): http://localhost:3000${NC}"
+echo -e "${BLUE}🌐 Frontend (network): http://$LOCAL_IP:3000${NC}"
+echo -e "${BLUE}🔗 Backend (local): http://localhost:3001${NC}"
+echo -e "${BLUE}🔗 Backend (network): http://$LOCAL_IP:3001${NC}"
 echo ""
 echo -e "${YELLOW}📝 How to use:${NC}"
-echo "1. Open http://localhost:3000 in your browser"
+echo "1. Open http://localhost:3000 in your browser (local) or http://$LOCAL_IP:3000 (from other devices)"
 echo "2. Create a room or join an existing one"
 echo "3. Share the room link with others to watch together"
 echo ""
