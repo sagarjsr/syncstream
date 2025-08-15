@@ -25,13 +25,10 @@ app.use(express.json());
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: [
-      "http://localhost:3000", 
-      "http://192.168.1.2:3000",
-      "https://*.vercel.app"
-    ],
-    methods: ["GET", "POST"]
-  }
+    origin: "*", // Allow all origins, location-independent
+    methods: ["GET", "POST"],
+  },
+  transports: ["websocket", "polling"] // Explicitly allow both transports
 });
 
 // Health check endpoint
