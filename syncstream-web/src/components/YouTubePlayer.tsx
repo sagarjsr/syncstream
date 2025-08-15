@@ -68,6 +68,7 @@ interface YouTubePlayerProps {
   muted?: boolean;
   width?: number;
   height?: number;
+  disableControls?: boolean; // Disable YouTube controls for participants
 }
 
 const YouTubePlayer = forwardRef<PlayerRef, YouTubePlayerProps>(({
@@ -80,7 +81,8 @@ const YouTubePlayer = forwardRef<PlayerRef, YouTubePlayerProps>(({
   autoplay = false,
   muted = false,
   width = 640,
-  height = 390
+  height = 390,
+  disableControls = false
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<YTPlayer | null>(null);
@@ -163,9 +165,9 @@ const YouTubePlayer = forwardRef<PlayerRef, YouTubePlayerProps>(({
       playerVars: {
         autoplay: autoplay ? 1 : 0,
         mute: muted ? 1 : 0,
-        controls: 1,
-        disablekb: 0,
-        fs: 1,
+        controls: disableControls ? 0 : 1, // Hide controls for participants
+        disablekb: disableControls ? 1 : 0, // Disable keyboard controls for participants
+        fs: disableControls ? 0 : 1, // Disable fullscreen for participants
         modestbranding: 1,
         playsinline: 1,
         rel: 0
@@ -185,7 +187,7 @@ const YouTubePlayer = forwardRef<PlayerRef, YouTubePlayerProps>(({
         playerRef.current.destroy();
       }
     };
-  }, [isAPIReady, videoId, width, height, autoplay, muted, handleReady, handleStateChange, handleError]);
+  }, [isAPIReady, videoId, width, height, autoplay, muted, disableControls, handleReady, handleStateChange, handleError]);
 
   // Expose player methods via ref
   useImperativeHandle(ref, () => ({

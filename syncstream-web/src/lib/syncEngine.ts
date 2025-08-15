@@ -1,12 +1,10 @@
 /** In-memory sync engine: tracks server offset, applies drift correction */
-import socket from './socket';
 
 export interface SyncState {
   serverOffset: number;
   lastSyncTime: number;
   isConnected: boolean;
   driftHistory: number[];
-  socket: typeof socket;
 }
 
 export class SyncEngine {
@@ -14,8 +12,7 @@ export class SyncEngine {
     serverOffset: 0,
     lastSyncTime: 0,
     isConnected: false,
-    driftHistory: [],
-    socket: socket
+    driftHistory: []
   };
 
   private readonly DRIFT_HISTORY_SIZE = 10;

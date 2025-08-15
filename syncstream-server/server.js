@@ -5,11 +5,11 @@
  * - Promote new leader on disconnect
  */
 
-import 'dotenv/config';
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
+import { networkInterfaces } from 'os';
 import { 
   createRoom, 
   getRoom, 
@@ -19,65 +19,80 @@ import {
   deleteRoom 
 } from './state.js';
 
-// Configure CORS based on environment
-const configureCors = () => {
-  const allowedOrigins = process.env.ALLOWED_ORIGINS || '*';
-  
-  // If ALLOWED_ORIGINS is '*', return simple CORS config
-  if (allowedOrigins === '*') {
-    return {
-      origin: '*',
-      methods: ['GET', 'POST', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization'],
-      credentials: true
-    };
+// Get local network IP address
+function getLocalNetworkIP() {
+  const nets = networkInterfaces();
+  const results = [];
+
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name]) {
+      // Skip over non-IPv4 and internal (i.e. 127.0.0.1) addresses
+      if (net.family === 'IPv4' && !net.internal) {
+        results.push(net.address);
+      }
+    }
   }
 
-  // Otherwise, parse the comma-separated list
-  const origins = allowedOrigins.split(',').map(origin => origin.trim());
-  
-  return {
-    origin: (origin, callback) => {
-      // Check if origin is in allowed list
-      if (!origin || origins.includes(origin) || origins.includes('*')) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
-    methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true
-  };
-};
+  return results;
+}
 
 const app = express();
-const corsOptions = configureCors();
-
-app.use(cors(corsOptions));
+app.use(cors());
 app.use(express.json());
 
-// Add OPTIONS handling for preflight requests
-app.options('*', cors(corsOptions));
+// Dynamic CORS origin detection
+const getAllowedOrigins = () => {
+  const origins = [
+    "http://localhost:3000",
+    "https://*.vercel.app"
+  ];
+  
+  // Add dynamic network IP detection
+  if (process.env.NODE_ENV !== 'production') {
+    // In development, allow any local network IP on port 3000
+    // This will be handled by the origin function below
+    origins.push("*");
+  }
+  
+  return origins;
+};
 
 const server = createServer(app);
 const io = new Server(server, {
-  cors: corsOptions,
-  allowEIO3: true,
-  transports: ['websocket', 'polling'], // Prefer websocket, fallback to polling
-  pingTimeout: 20000,
-  pingInterval: 10000,
-  upgradeTimeout: 10000,
-  maxHttpBufferSize: 1e6, // 1 MB should be enough
-  allowUpgrades: true,
-  connectTimeout: 10000,
-  cookie: false, // Disable Socket.IO cookie to prevent issues
-  path: '/socket.io/', // Explicit socket.io path
-  serveClient: false, // Don't serve client files
-  reconnection: true,
-  reconnectionAttempts: 5,
-  reconnectionDelay: 1000,
-  reconnectionDelayMax: 5000
+  cors: {
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, curl, etc.)
+      if (!origin) return callback(null, true);
+      
+      const allowedOrigins = [
+        "http://localhost:3000",
+        "https://*.vercel.app"
+      ];
+      
+      // Check exact matches
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      
+      // Allow any localhost or local network IP on port 3000 in development
+      if (process.env.NODE_ENV !== 'production') {
+        const localPattern = /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+):3000$/;
+        if (localPattern.test(origin)) {
+          return callback(null, true);
+        }
+      }
+      
+      // Allow Vercel preview deployments
+      if (origin.includes('.vercel.app')) {
+        return callback(null, true);
+      }
+      
+      console.warn('CORS blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    },
+    methods: ["GET", "POST"],
+    credentials: true
+  }
 });
 
 // Health check endpoint
@@ -85,48 +100,8 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: Date.now() });
 });
 
-// Handle Socket.IO errors
-io.engine.on('connection_error', (err) => {
-  console.error('Socket.IO connection error:', {
-    code: err.code,
-    message: err.message,
-    context: err.context,
-    req: err.req ? {
-      url: err.req.url,
-      method: err.req.method,
-      headers: err.req.headers
-    } : 'No request data'
-  });
-});
-
-// Handle upgrade errors
-server.on('upgrade', (req, socket) => {
-  socket.on('error', (err) => {
-    console.error('WebSocket upgrade error:', err);
-    socket.end();
-  });
-});
-
-// Monitor Socket.IO engine events
-io.engine.on('initial_headers', (headers, req) => {
-  console.log('Setting initial headers:', headers);
-});
-
-io.engine.on('headers', (headers, req) => {
-  console.log('Setting headers:', headers);
-});
-
-// Debug transport selection
-io.engine.on('transport', (transport) => {
-  console.log('New transport selected:', transport.name);
-});
-
 io.on('connection', (socket) => {
-  console.log(`Client connected: ${socket.id}`, {
-    transport: socket.conn.transport.name,
-    headers: socket.handshake.headers,
-    query: socket.handshake.query
-  });
+  console.log(`Client connected: ${socket.id}`);
 
   // Join room event
   socket.on('join_room', ({ roomId, name, shareToken }, callback) => {
@@ -295,6 +270,27 @@ io.on('connection', (socket) => {
     });
 
     console.log(`Control command ${type} from ${socket.id} in room ${roomId}`);
+  });
+
+  // Clear media (leader only)
+  socket.on('media_cleared', ({ roomId }) => {
+    const room = getRoom(roomId);
+    
+    if (!room || room.leaderId !== socket.id) {
+      return; // Only leader can clear media
+    }
+
+    // Clear media in room state
+    room.mediaKind = null;
+    room.mediaRef = null;
+    room.isPlaying = false;
+    room.leaderMediaTime = 0;
+    room.leaderServerTs = Date.now();
+
+    // Broadcast media cleared to all participants in the room
+    io.to(roomId).emit('media_cleared');
+
+    console.log(`Media cleared by ${socket.id} in room ${roomId}`);
   });
 
   // Promote leader
@@ -562,41 +558,26 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3001;
-
-// Get all network interfaces
-import { networkInterfaces } from 'os';
-
-const getNetworkUrls = (port) => {
-  const nets = networkInterfaces();
-  const results = [];
-
-  for (const name of Object.keys(nets)) {
-    for (const net of nets[name]) {
-      // Skip internal and non-IPv4 addresses
-      if (!net.internal && net.family === 'IPv4') {
-        results.push(`http://${net.address}:${port}`);
-      }
-    }
-  }
-
-  return results;
-};
-
 server.listen(PORT, '0.0.0.0', () => {
-  console.log('\n🚀 SyncStream server is running!\n');
-  console.log('📡 Access URLs:');
-  console.log(`   Local:   http://localhost:${PORT}`);
+  const networkIPs = getLocalNetworkIP();
   
-  const networkUrls = getNetworkUrls(PORT);
-  if (networkUrls.length > 0) {
-    console.log('   Network:');
-    networkUrls.forEach(url => {
-      console.log(`            ${url}`);
+  console.log('🚀 SyncStream Server Started Successfully!');
+  console.log('=====================================');
+  console.log(`📡 Server Port: ${PORT}`);
+  console.log(`🏠 Local Access: http://localhost:${PORT}`);
+  
+  if (networkIPs.length > 0) {
+    console.log('🌐 Network Access:');
+    networkIPs.forEach(ip => {
+      console.log(`   http://${ip}:${PORT}`);
     });
   }
   
-  console.log('\n💡 Configure CORS:');
-  console.log('   Set ALLOWED_ORIGINS in .env to restrict access');
-  console.log('   Current setting:', process.env.ALLOWED_ORIGINS || '*');
-  console.log('\n✨ Ready for connections!\n');
+  console.log('=====================================');
+  console.log('💡 Configure your frontend with:');
+  if (networkIPs.length > 0) {
+    console.log(`   NEXT_PUBLIC_SOCKET_URL=http://${networkIPs[0]}:${PORT}`);
+  }
+  console.log(`   (or leave NEXT_PUBLIC_SOCKET_URL empty for auto-detection)`);
+  console.log('=====================================');
 });

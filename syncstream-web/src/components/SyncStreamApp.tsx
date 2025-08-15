@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSyncStreamStore } from '@/lib/store';
+import { formatNetworkDisplay, copyToClipboard } from '@/lib/networkUtils';
 import YouTubePlayer, { PlayerRef } from './YouTubePlayer';
 import AudioPlayer from './AudioPlayer';
 
@@ -19,6 +20,7 @@ export default function SyncStreamApp({ className }: SyncStreamAppProps) {
   const [isDarkTheme, setIsDarkTheme] = useState(true);
   const [shareLink, setShareLink] = useState<string>('');
   const [isGeneratingLink, setIsGeneratingLink] = useState(false);
+  const [showNetworkInfo, setShowNetworkInfo] = useState(false);
 
   const playerRef = useRef<PlayerRef>(null);
   const leaderStateIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -36,6 +38,7 @@ export default function SyncStreamApp({ className }: SyncStreamAppProps) {
     pause,
     seek,
     setMedia,
+    clearMedia,
     promoteLeader,
     kickParticipant,
     generateShareLink,
@@ -114,7 +117,7 @@ export default function SyncStreamApp({ className }: SyncStreamAppProps) {
         // Calculate expected time based on server state
         const expectedTime = syncEngine.calculateCurrentMediaTime(
           room.currentTime,
-          Date.now(), // Approximation - should use server timestamp
+          room.leaderServerTs, // Use proper server timestamp instead of approximation
           room.isPlaying
         );
 
@@ -148,7 +151,7 @@ export default function SyncStreamApp({ className }: SyncStreamAppProps) {
         console.warn('Player sync error (player may not be ready):', error);
       }
     }
-  }, [room.isPlaying, room.currentTime, room.isLeader, room.mediaKind, room.mediaRef, syncEngine, isPlayerReady]);
+  }, [room.isPlaying, room.currentTime, room.leaderServerTs, room.isLeader, room.mediaKind, room.mediaRef, syncEngine, isPlayerReady]);
 
   const handleJoinRoom = useCallback(async (shareToken?: string) => {
     if (!roomId.trim() || !userName.trim()) return;
@@ -208,6 +211,17 @@ export default function SyncStreamApp({ className }: SyncStreamAppProps) {
 
     setMedia(mediaKind, mediaRef);
     setIsPlayerReady(false); // Reset player ready state when changing media
+  };
+
+  const handleClearMedia = () => {
+    if (room.mediaKind || room.mediaRef) {
+      const confirmed = confirm('Are you sure you want to remove the current media? This will stop playback for all participants.');
+      if (confirmed) {
+        clearMedia();
+        setMediaUrl(''); // Also clear the input field
+        setIsPlayerReady(false);
+      }
+    }
   };
 
   const handlePlayerReady = useCallback(() => {
@@ -351,9 +365,45 @@ export default function SyncStreamApp({ className }: SyncStreamAppProps) {
           </button>
         </div>
 
-        <h1 className={`text-3xl font-bold text-center mb-8 ${isDarkTheme ? 'text-white' : 'text-gray-800'}`}>
+        <h1 className={`text-3xl font-bold text-center mb-4 ${isDarkTheme ? 'text-white' : 'text-gray-800'}`}>
           🎵 SyncStream
         </h1>
+
+        {/* Network Information */}
+        <div className="text-center mb-8">
+          <button
+            onClick={() => setShowNetworkInfo(!showNetworkInfo)}
+            className={`text-sm px-3 py-1 rounded-full transition-colors ${
+              isDarkTheme 
+                ? 'text-gray-400 hover:text-white hover:bg-gray-700' 
+                : 'text-gray-600 hover:text-gray-800 hover:bg-gray-200'
+            }`}
+          >
+            🌐 Network: {(() => {
+              const info = formatNetworkDisplay();
+              return info.isLocal ? 'localhost' : info.displayUrl.replace(/^https?:\/\//, '');
+            })()} {showNetworkInfo ? '▲' : '▼'}
+          </button>
+          
+          {showNetworkInfo && (
+            <div className={`mt-2 p-3 rounded-lg text-sm ${
+              isDarkTheme 
+                ? 'bg-gray-800 border border-gray-700 text-gray-300' 
+                : 'bg-gray-50 border border-gray-200 text-gray-700'
+            }`}>
+              <div className="space-y-1">
+                <div><strong>Frontend:</strong> {formatNetworkDisplay().displayUrl}</div>
+                <div><strong>Backend:</strong> Auto-detected (port 3001)</div>
+                {formatNetworkDisplay().isLocal && (
+                  <div className="text-xs mt-2 pt-2 border-t border-gray-600">
+                    💡 <strong>Network Access:</strong> Start server with <code>node server.js</code> 
+                    and connect other devices to your network IP
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
 
         {!room.roomId ? (
           // Join room form
@@ -477,6 +527,29 @@ export default function SyncStreamApp({ className }: SyncStreamAppProps) {
             }`}>
               <h3 className={`text-lg font-semibold mb-4 ${isDarkTheme ? 'text-white' : 'text-gray-800'}`}>Media Controls (Leader)</h3>
               <div className="space-y-4">
+                {/* Current Media Status */}
+                {(room.mediaKind || room.mediaRef) && (
+                  <div className={`p-3 rounded-md ${
+                    isDarkTheme 
+                      ? 'bg-gray-700 border border-gray-600' 
+                      : 'bg-blue-50 border border-blue-200'
+                  }`}>
+                    <p className={`text-sm font-medium ${
+                      isDarkTheme ? 'text-blue-300' : 'text-blue-800'
+                    }`}>
+                      📺 Currently Loaded: {room.mediaKind === 'youtube' ? 'YouTube Video' : 'Audio File'}
+                    </p>
+                    <p className={`text-xs mt-1 break-all ${
+                      isDarkTheme ? 'text-gray-300' : 'text-gray-600'
+                    }`}>
+                      {room.mediaKind === 'youtube' 
+                        ? `Video ID: ${room.mediaRef}` 
+                        : `URL: ${room.mediaRef}`
+                      }
+                    </p>
+                  </div>
+                )}
+                
                 <div>
                   <label className={`block text-sm font-medium mb-1 ${isDarkTheme ? 'text-white' : 'text-gray-700'}`}>
                     YouTube URL or MP3 URL
@@ -504,6 +577,19 @@ export default function SyncStreamApp({ className }: SyncStreamAppProps) {
                     >
                       Load
                     </button>
+                    {(room.mediaKind || room.mediaRef) && (
+                      <button
+                        onClick={handleClearMedia}
+                        className={`font-bold py-2 px-4 rounded text-white ${
+                          isDarkTheme
+                            ? 'bg-red-800 hover:bg-red-900'
+                            : 'bg-red-600 hover:bg-red-700'
+                        }`}
+                        title="Remove current media"
+                      >
+                        Remove
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -532,6 +618,7 @@ export default function SyncStreamApp({ className }: SyncStreamAppProps) {
                     onTimeUpdate={handlePlayerTimeUpdate}
                     width={640}
                     height={390}
+                    disableControls={!room.isLeader}
                   />
                 ) : (
                   <AudioPlayer
@@ -544,6 +631,7 @@ export default function SyncStreamApp({ className }: SyncStreamAppProps) {
                     onTimeUpdate={handlePlayerTimeUpdate}
                     width={640}
                     height={200}
+                    disableControls={!room.isLeader}
                   />
                 )}
               </div>
